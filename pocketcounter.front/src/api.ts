@@ -1,5 +1,13 @@
 // src/api.ts
-import type { ProductsResponse, Category, OrdersResponse, Customer } from "./types";
+import type {
+  ProductsResponse,
+  Category,
+  OrdersResponse,
+  Customer,
+  CartLine,
+  HumanName,
+  Address,
+} from "./types";
 
 const API_URL = "http://localhost:5067";
 
@@ -157,22 +165,23 @@ export async function addNewProduct(
 
 export async function hardDeleteProduct(productId: string, categoryId: string) {
   const token = localStorage.getItem("authToken");
-  const response = await fetch(`${API_URL}/category/${categoryId}/product/${productId}/hard`, {
-    method: "DELETE",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-  });
+  const response = await fetch(
+    `${API_URL}/category/${categoryId}/product/${productId}/hard`,
+    {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
   if (!response.ok) throw new Error("Ошибка обновления количеств");
 }
 
-export async function addNewCategory(
-  data: {
-    name: string;
-    description: string;
-  }
-) {
+export async function addNewCategory(data: {
+  name: string;
+  description: string;
+}) {
   const token = localStorage.getItem("authToken");
   const response = await fetch(`${API_URL}/category`, {
     method: "POST",
@@ -200,4 +209,88 @@ export async function fetchOrders(): Promise<OrdersResponse> {
   });
   if (!response.ok) throw new Error("Ошибка при загрузке продуктов");
   return response.json();
+}
+
+export async function updateOrderCartLines(
+  customerId: string,
+  orderId: string,
+  data: {
+    cartLinesDtoForAdd: CartLine[] | null;
+    cartLinesDtoForRemove: CartLine[] | null;
+  }
+) {
+  const token = localStorage.getItem("authToken");
+  const response = await fetch(
+    `${API_URL}/customer/${customerId}/order/${orderId}/cartlines`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(data),
+    }
+  );
+  if (!response.ok) throw new Error("Ошибка обновления количеств");
+}
+
+export async function updateOrderStatus(
+  customerId: string,
+  orderId: string,
+  data: {
+    status: number;
+    isPaid: boolean;
+  }
+) {
+  const token = localStorage.getItem("authToken");
+  const response = await fetch(
+    `${API_URL}/customer/${customerId}/order/${orderId}/status`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(data),
+    }
+  );
+  if (!response.ok) throw new Error("Ошибка обновления количеств");
+}
+
+export async function updateCustonerNameAndPhone(
+  customerId: string,
+  data: {
+    fullName: HumanName;
+    phoneNumber: string;
+  }
+) {
+  const token = localStorage.getItem("authToken");
+  const response = await fetch(`${API_URL}/customer/${customerId}/settings`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error("Ошибка обновления данных заказчика");
+}
+
+export async function updateOrderAddress(
+  customerId: string,
+  orderId: string,
+  data: {
+    address: Address;
+  }
+) {
+  const token = localStorage.getItem("authToken");
+  const response = await fetch(`${API_URL}/customer/${customerId}/order/${orderId}/address`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error("Ошибка обновления данных заказчика");
 }

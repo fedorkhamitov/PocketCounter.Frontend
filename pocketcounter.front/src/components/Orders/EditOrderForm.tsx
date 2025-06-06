@@ -1,210 +1,415 @@
-import { useState } from 'react';
-import type { Order, Product, CartLine } from '../../types';
-import { Modal, Button, Tabs, Tab, Form } from 'react-bootstrap';
+import { useState } from "react";
+import type { Order, Product, CartLine, Customer } from "../../types";
+import { Button, Form, Collapse, Table } from "react-bootstrap";
+import EditCustomerName from "./EditCustomerName";
+import EditAddressForm from "./EditAddressForm";
 
 interface EditOrderFormProps {
   order: Order;
   products: Product[];
+  customer: Customer | undefined;
   onClose: () => void;
-  onSave: (updateData: {
-    statusUpdate?: { status: number; isPaid: boolean };
-    cartUpdate?: {
-      add: { productId: string; quantity: number }[];
-      remove: { productId: string; quantity: number }[];
-    };
+  onSaveStatus: (newStatus: number, isPaid: boolean) => void;
+  onSaveCartLines: (data: {
+    cartLinesDtoForAdd: CartLine[] | null;
+    cartLinesDtoForRemove: CartLine[] | null;
   }) => void;
 }
 
 const statusOptions = [
-  { value: 0, label: 'Новый' },
-  { value: 1, label: 'Готов к отправке' },
-  { value: 2, label: 'Отправлен' }
+  { value: 1, label: "Новый" },
+  { value: 2, label: "Готов к отправке" },
+  { value: 3, label: "Бронь" },
+  { value: 4, label: "Частичная бронь" },
+  { value: 5, label: "Готов отложен" },
+  { value: 6, label: "Отправлен" },
 ];
 
-const EditOrderForm: React.FC<EditOrderFormProps> = ({ 
-  order, 
+const EditOrderForm: React.FC<EditOrderFormProps> = ({
+  order,
   products,
+  customer,
   onClose,
-  onSave
+  onSaveStatus,
+  onSaveCartLines,
 }) => {
-  const [selectedStatus, setSelectedStatus] = useState<number>(0);
-  const [isPaid, setIsPaid] = useState(order.isPaid);
-  const [cartChanges, setCartChanges] = useState<{
-    add: CartLine[];
-    remove: CartLine[];
-  }>({ add: [], remove: [] });
-
-  const handleAddProduct = (productId: string, quantity: number) => {
-    setCartChanges(prev => ({
-      ...prev,
-      add: [...prev.add, { productId, quantity }]
-    }));
-  };
-
-  const handleRemoveProduct = (productId: string, quantity: number) => {
-    setCartChanges(prev => ({
-      ...prev,
-      remove: [...prev.remove, { productId, quantity }]
-    }));
-  };
-
-  const handleSubmit = () => {
-    const statusUpdate = {
-      status: selectedStatus,
-      isPaid
-    };
-
-    const cartUpdate = {
-      add: cartChanges.add,
-      remove: cartChanges.remove
-    };
-
-    onSave({ statusUpdate, cartUpdate });
-    onClose();
-  };
-
-  return (
-    <Modal show={true} onHide={onClose} size="lg">
-      <Modal.Header closeButton>
-        <Modal.Title>Редактирование заказа #{order.serialNumber}</Modal.Title>
-      </Modal.Header>
-      
-      <Modal.Body>
-        <Tabs defaultActiveKey="status" className="mb-3">
-          <Tab eventKey="status" title="Статус и оплата">
-            <Form.Group className="mb-3">
-              <Form.Label>Статус заказа</Form.Label>
-              <Form.Select 
-                value={selectedStatus}
-                onChange={(e) => setSelectedStatus(Number(e.target.value))}
-              >
-                {statusOptions.map(option => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </Form.Select>
-            </Form.Group>
-
-            <Form.Group className="mb-3">
-              <Form.Check 
-                type="checkbox"
-                label="Заказ оплачен"
-                checked={isPaid}
-                onChange={(e) => setIsPaid(e.target.checked)}
-              />
-            </Form.Group>
-          </Tab>
-
-          <Tab eventKey="cart" title="Состав заказа">
-            <ProductsSelection
-              products={products}
-              currentCart={order.cartLines}
-              onAdd={handleAddProduct}
-              onRemove={handleRemoveProduct}
-            />
-          </Tab>
-        </Tabs>
-      </Modal.Body>
-
-      <Modal.Footer>
-        <Button variant="secondary" onClick={onClose}>
-          Отмена
-        </Button>
-        <Button variant="primary" onClick={handleSubmit}>
-          Сохранить изменения
-        </Button>
-      </Modal.Footer>
-    </Modal>
+  const [showEditCustomer, setShowEditCustomer] = useState(false);
+  const [showEditAddress, setShowEditAddress] = useState(false);
+  // Статус и оплата
+  const [selectedStatus, setSelectedStatus] = useState<number>(
+    order.status ? Number(order.status) : 1
   );
-};
+  const [isPaid, setIsPaid] = useState(order.isPaid);
+  const [searchQuery, setSearchQuery] = useState<string>("");
 
-const ProductsSelection: React.FC<{
-  products: Product[];
-  currentCart: CartLine[];
-  onAdd: (productId: string, quantity: number) => void;
-  onRemove: (productId: string, quantity: number) => void;
-}> = ({ products, currentCart, onAdd, onRemove }) => {
-  const [selectedProduct, setSelectedProduct] = useState('');
-  const [quantity, setQuantity] = useState(1);
+  // Для добавления продуктов
+  const [showProductSelector, setShowProductSelector] = useState(false);
+  const [addLines, setAddLines] = useState<CartLine[]>([]);
+  const [addQuantities, setAddQuantities] = useState<{ [id: string]: string }>(
+    {}
+  );
+
+  // Для удаления продуктов
+  const [removeLines, setRemoveLines] = useState<CartLine[]>([]);
+  const [removeQuantities, setRemoveQuantities] = useState<{
+    [id: string]: string;
+  }>({});
+
+  const filteredProducts = products.filter((product) =>
+    product.title.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Добавить или увеличить количество продукта
+  const handleAddProduct = (product: Product) => {
+    const qtyToAdd = parseInt(addQuantities[product.id], 10) || 0;
+    if (qtyToAdd > 0) {
+      setAddLines((prev) => {
+        const index = prev.findIndex((line) => line.productId === product.id);
+        if (index !== -1) {
+          // Продукт уже есть — увеличиваем количество
+          return prev.map((line, i) =>
+            i === index ? { ...line, quantity: line.quantity + qtyToAdd } : line
+          );
+        } else {
+          // Продукта нет — добавляем новый
+          return [...prev, { productId: product.id, quantity: qtyToAdd }];
+        }
+      });
+      setAddQuantities((prev) => ({ ...prev, [product.id]: "" }));
+    }
+  };
+
+  // Удалить часть продукта
+  const handleRemoveProduct = (product: Product) => {
+    const qty = parseInt(removeQuantities[product.id], 10) || 0;
+    if (qty > 0) {
+      setRemoveLines((prev) => {
+        const index = prev.findIndex((line) => line.productId === product.id);
+        if (index !== -1) {
+          return prev.map((line, i) =>
+            i === index ? { ...line, quantity: line.quantity + qty } : line
+          );
+        }
+        return [...prev, { productId: product.id, quantity: qty }];
+      });
+      setRemoveQuantities((prev) => ({ ...prev, [product.id]: "" }));
+    }
+  };
+
+  // Удалить всё количество продукта
+  const handleRemoveAll = (product: Product) => {
+    const current = order.cartLines.find(
+      (line) => line.productId === product.id
+    );
+    if (current) {
+      setRemoveLines((prev) => [
+        ...prev.filter((line) => line.productId !== product.id),
+        { productId: product.id, quantity: current.quantity },
+      ]);
+      setRemoveQuantities((prev) => ({ ...prev, [product.id]: "" }));
+    }
+  };
+
+  // Удалить из списка добавленных (UI только)
+  const handleDeleteFromAdd = (productId: string) => {
+    setAddLines((prev) => prev.filter((line) => line.productId !== productId));
+  };
+
+  // Удалить из списка удалённых (UI только)
+  const handleDeleteFromRemove = (productId: string) => {
+    setRemoveLines((prev) =>
+      prev.filter((line) => line.productId !== productId)
+    );
+  };
+
+  const handleSaveStatus = () => {
+    // Вызываем колбэк и передаём данные в родитель
+    onSaveStatus(selectedStatus, isPaid);
+  };
+
+  const handleSaveCartLines = () => {
+    // Передаём данные корзины
+    onSaveCartLines({
+      cartLinesDtoForAdd: addLines.length > 0 ? addLines : null,
+      cartLinesDtoForRemove: removeLines.length > 0 ? removeLines : null,
+    });
+  };
 
   return (
-    <div>
-      <div className="mb-4">
-        <h5>Добавить товары</h5>
-        <div className="d-flex gap-2">
-          <Form.Select
-            value={selectedProduct}
-            onChange={(e) => setSelectedProduct(e.target.value)}
+    <div className="container my-4">
+      <h3>Редактирование заказа #{order.serialNumber}</h3>
+      <div className="row mb-4">
+        <div className="m-2">
+          <Button
+            variant="outline-primary"
+            className="mb-3"
+            onClick={() => setShowEditCustomer(true)}
           >
-            <option value="">Выберите товар</option>
-            {products.map(product => (
-              <option key={product.id} value={product.id}>
-                {product.title}
-              </option>
-            ))}
-          </Form.Select>
-          
-          <Form.Control
-            type="number"
-            min="1"
-            value={quantity}
-            onChange={(e) => setQuantity(Number(e.target.value))}
-            style={{ width: '100px' }}
-          />
-          
-          <Button 
-            variant="success"
-            onClick={() => {
-              if (selectedProduct) {
-                onAdd(selectedProduct, quantity);
-                setSelectedProduct('');
-              }
-            }}
+            Редактировать имя и телефон клиента
+          </Button>
+          {showEditCustomer && (
+            <EditCustomerName
+              customerId={order.customerId}
+              initialName={customer!.name} // или order.customer.name, если структура такая
+              initialPhone={customer!.phoneNumber} // или order.customer.phoneNumber
+              onClose={() => setShowEditCustomer(false)}
+              onSave={async () => {
+                // Можно обновить данные заказа через API или перезапросить заказчика
+                setShowEditCustomer(false);
+              }}
+            />
+          )}
+        </div>
+        <div className="m-2">
+          <Button
+            variant="outline-info"
+            className="mb-3"
+            onClick={() => setShowEditAddress(true)}
           >
-            Добавить
+            Изменить адрес доставки
+          </Button>
+
+          {showEditAddress && (
+            <EditAddressForm
+              customerId={order.customerId}
+              orderId={order.id}
+              initialAddress={order.address}
+              onClose={() => setShowEditAddress(false)}
+              onSave={() => {
+                // Можно обновить локальные данные или перезапросить заказ
+                setShowEditAddress(false);
+              }}
+            />
+          )}
+        </div>
+        <div className="col-md-6">
+          <Form.Group className="mb-3">
+            <Form.Label>Статус заказа</Form.Label>
+            <Form.Select
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(Number(e.target.value))}
+            >
+              {statusOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Form.Select>
+          </Form.Group>
+          <Form.Group className="mb-3">
+            <Form.Check
+              type="checkbox"
+              label="Заказ оплачен"
+              checked={isPaid}
+              onChange={(e) => setIsPaid(e.target.checked)}
+            />
+          </Form.Group>
+          <Button variant="primary" className="mb-4" onClick={handleSaveStatus}>
+            Сохранить статус
           </Button>
         </div>
       </div>
+      <hr />
+      <div className="mb-4">
+        <Button
+          variant="outline-success"
+          onClick={() => setShowProductSelector((v) => !v)}
+          className="mb-3"
+        >
+          Выбрать продукт
+        </Button>
+        <Collapse in={showProductSelector}>
+          <div>
+            <Form.Control
+              type="text"
+              placeholder="Поиск по названию..."
+              className="mb-3"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            <Table bordered size="sm">
+              <thead>
+                <tr>
+                  <th>SKU</th>
+                  <th>Название</th>
+                  <th>Количество</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredProducts.map((product) => (
+                  <tr key={product.id}>
+                    <td>{product.sku}</td>
+                    <td>{product.title}</td>
+                    <td style={{ width: 120 }}>
+                      <Form.Control
+                        type="text"
+                        value={addQuantities[product.id] || ""}
+                        onChange={(e) =>
+                          setAddQuantities((prev) => ({
+                            ...prev,
+                            [product.id]: e.target.value,
+                          }))
+                        }
+                        placeholder="Введите число"
+                      />
+                    </td>
+                    <td>
+                      <Button
+                        size="sm"
+                        variant="success"
+                        onClick={() => handleAddProduct(product)}
+                        disabled={!addQuantities[product.id]}
+                      >
+                        Добавить
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          </div>
+        </Collapse>
+      </div>
 
-      <div>
-        <h5>Текущий состав заказа</h5>
-        <table className="table">
+      {/* Список добавленных продуктов */}
+      <div className="mb-4">
+        <h6>Добавленные продукты</h6>
+        <Table bordered size="sm">
           <thead>
             <tr>
-              <th>Товар</th>
+              <th>SKU</th>
+              <th>Название</th>
               <th>Количество</th>
-              <th>Действия</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
-            {currentCart.map(line => {
-              const product = products.find(p => p.id === line.productId);
+            {addLines.map((line) => {
+              const product = products.find((p) => p.id === line.productId);
               return (
                 <tr key={line.productId}>
-                  <td>{product?.title || 'Неизвестный товар'}</td>
+                  <td>{product?.sku}</td>
+                  <td>{product?.title}</td>
                   <td>{line.quantity}</td>
                   <td>
-                    <Form.Control
-                      type="number"
-                      min="0"
-                      max={line.quantity}
-                      defaultValue="0"
-                      onChange={(e) => {
-                        const removeQty = Number(e.target.value);
-                        if (removeQty > 0) {
-                          onRemove(line.productId, removeQty);
-                        }
-                      }}
-                      style={{ width: '100px' }}
-                    />
+                    <Button
+                      size="sm"
+                      variant="outline-danger"
+                      onClick={() => handleDeleteFromAdd(line.productId)}
+                    >
+                      Удалить
+                    </Button>
                   </td>
                 </tr>
               );
             })}
           </tbody>
-        </table>
+        </Table>
       </div>
+
+      {/* Удаление продуктов */}
+      <div className="mb-4">
+        <h6>Удалить из заказа</h6>
+        <Table bordered size="sm">
+          <thead>
+            <tr>
+              <th>SKU</th>
+              <th>Название</th>
+              <th>Количество</th>
+              <th></th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {order.cartLines.map((line) => {
+              const product = products.find((p) => p.id === line.productId);
+              return (
+                <tr key={line.productId}>
+                  <td>{product?.sku}</td>
+                  <td>{product?.title}</td>
+                  <td style={{ width: 120 }}>
+                    <Form.Control
+                      type="text"
+                      value={removeQuantities[line.productId] || ""}
+                      onChange={(e) =>
+                        setRemoveQuantities((prev) => ({
+                          ...prev,
+                          [line.productId]: e.target.value,
+                        }))
+                      }
+                      placeholder="Введите число"
+                    />
+                  </td>
+                  <td>
+                    <Button
+                      size="sm"
+                      variant="warning"
+                      onClick={() => handleRemoveProduct(product!)}
+                      disabled={!removeQuantities[line.productId]}
+                    >
+                      Удалить
+                    </Button>
+                  </td>
+                  <td>
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      onClick={() => handleRemoveAll(product!)}
+                    >
+                      Удалить всё
+                    </Button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </Table>
+        <h6>К удалению:</h6>
+        <Table bordered size="sm">
+          <thead>
+            <tr>
+              <th>SKU</th>
+              <th>Название</th>
+              <th>Количество</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {removeLines.map((line) => {
+              const product = products.find((p) => p.id === line.productId);
+              return (
+                <tr key={line.productId}>
+                  <td>{product?.sku}</td>
+                  <td>{product?.title}</td>
+                  <td>{line.quantity}</td>
+                  <td>
+                    <Button
+                      size="sm"
+                      variant="outline-danger"
+                      onClick={() => handleDeleteFromRemove(line.productId)}
+                    >
+                      Удалить
+                    </Button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </Table>
+      </div>
+
+      <Button variant="success" onClick={handleSaveCartLines}>
+        Сохранить продукты
+      </Button>
+      <Button
+        variant="secondary"
+        type="button"
+        className="ms-3"
+        onClick={onClose}
+      >
+        Отмена
+      </Button>
     </div>
   );
 };

@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
-import type { Customer, Order, Product } from "../types";
-import { fetchCustomers, fetchOrders, fetchProducts } from "../api";
+import type { CartLine, Customer, Order, Product } from "../types";
+import { fetchCustomers, fetchOrders, fetchProducts, /*updateProductQuantities*/ } from "../api";
 import { useNavigate } from "react-router-dom";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import OrderList from "../components/Orders/OrdersList";
 import { ErrorAlert } from "../components/ErrorAlert";
 import OrderCard from "../components/Orders/OrderCard";
 import EditOrderForm from "../components/Orders/EditOrderForm";
+import { updateOrderCartLines, updateOrderStatus } from "../api";
 
 const OrdersPage: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -64,6 +65,41 @@ const OrdersPage: React.FC = () => {
     alert(`Удаление заказа №${order.serialNumber} (id: ${order.id})`);
   };
 
+ const handleSaveStatus = async (newStatus: number, isPaid: boolean) => {
+    try {
+        await updateOrderStatus(selectedOrder!.customerId, selectedOrder!.id, {
+            status: newStatus,
+            isPaid: isPaid,
+        });
+        window.location.href = "/orders";
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Ошибка сохранения"
+      );
+    }
+  };
+
+  const handleSaveCartLines = async (data: {
+  cartLinesDtoForAdd: CartLine[] | null;
+  cartLinesDtoForRemove: CartLine[] | null;
+}) => {
+  try {
+    await updateOrderCartLines(
+      selectedOrder!.customerId,
+      selectedOrder!.id,
+      {
+        cartLinesDtoForAdd: data.cartLinesDtoForAdd || [],
+        cartLinesDtoForRemove: data.cartLinesDtoForRemove || []
+      }
+    );
+    window.location.href = "/orders";
+  } catch (err) {
+    setError(
+      err instanceof Error ? err.message : "Ошибка сохранения"
+    );
+  }
+};
+
   const filteredOrders = orders.filter((order) =>
     showArchived ? order.status === "Shipped" : order.status !== "Shipped"
   );
@@ -80,19 +116,19 @@ const OrdersPage: React.FC = () => {
     );
 
   if (editingOrder) {
+    const customer = customers.find((c) => c.id === selectedOrder!.customerId);
     return (
       <EditOrderForm
         order={editingOrder}
         products={products}
+        customer={customer}
         onClose={() => setEditingOrder(null)}
-        onSave={(updateData) => {
-          // Здесь выполнение API запросов
-          console.log("Данные для обновления:", updateData);
-          setEditingOrder(null);
-        }}
+        onSaveStatus={handleSaveStatus}
+        onSaveCartLines={handleSaveCartLines}
       />
     );
   }
+
   if (selectedOrder) {
     const customer = customers.find((c) => c.id === selectedOrder.customerId);
     return (

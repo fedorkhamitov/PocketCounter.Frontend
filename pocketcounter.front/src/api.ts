@@ -7,6 +7,7 @@ import type {
   CartLine,
   HumanName,
   Address,
+  CustomersResponse
 } from "./types";
 
 const API_URL = "http://localhost:5067";
@@ -199,7 +200,7 @@ export async function fetchCustomers(): Promise<Customer[]> {
     headers: getAuthHeaders(),
   });
   if (!response.ok) throw new Error("Ошибка при загрузке категорий");
-  const data = await response.json();
+  const data: CustomersResponse = await response.json();
   return data.result || [];
 }
 
@@ -284,8 +285,47 @@ export async function updateOrderAddress(
   }
 ) {
   const token = localStorage.getItem("authToken");
-  const response = await fetch(`${API_URL}/customer/${customerId}/order/${orderId}/address`, {
-    method: "PUT",
+  const response = await fetch(
+    `${API_URL}/customer/${customerId}/order/${orderId}/address`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(data),
+    }
+  );
+  if (!response.ok) throw new Error("Ошибка обновления данных заказчика");
+}
+
+export async function createNewCustomer(data: {
+  fullName: HumanName;
+  phoneNumber: string;
+}): Promise<{ result: string }> { // <-- добавьте тип возвращаемого значения
+  const token = localStorage.getItem("authToken");
+  const response = await fetch(`${API_URL}/customer`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error("Ошибка обновления данных заказчика");
+  return response.json(); // <-- обязательно вернуть результат!
+}
+
+export async function createNewOrder(
+  customerId: string,
+  data: {
+  cartLineDtos: CartLine[];
+  address: Address;
+  comment: string;
+}) {
+  const token = localStorage.getItem("authToken");
+  const response = await fetch(`${API_URL}/customer/${customerId}/order`, {
+    method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,

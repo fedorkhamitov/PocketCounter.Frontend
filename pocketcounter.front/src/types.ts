@@ -92,3 +92,9 @@ export interface Customer {
   name: HumanName;
   phoneNumber: string;
 }
+
+export interface CustomersResponse {
+  result: Customer[];
+  errors: string[];
+  timeGenerated: string;
+}

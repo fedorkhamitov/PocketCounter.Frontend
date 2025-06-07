@@ -8,7 +8,7 @@ interface EditCustomerNameProps {
   initialName: HumanName;
   initialPhone: string;
   onClose: () => void;
-  onSave: () => void; // Для обновления данных в родительском компоненте
+  onSave: () => void;
 }
 
 const EditCustomerName: React.FC<EditCustomerNameProps> = ({

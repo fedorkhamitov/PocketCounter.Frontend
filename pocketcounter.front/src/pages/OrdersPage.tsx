@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import type { CartLine, Customer, Order, Product } from "../types";
-import { fetchCustomers, fetchOrders, fetchProducts, /*updateProductQuantities*/ } from "../api";
+import {
+  fetchCustomers,
+  fetchOrders,
+  fetchProducts /*updateProductQuantities*/,
+} from "../api";
 import { useNavigate } from "react-router-dom";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import OrderList from "../components/Orders/OrdersList";
@@ -65,40 +69,32 @@ const OrdersPage: React.FC = () => {
     alert(`Удаление заказа №${order.serialNumber} (id: ${order.id})`);
   };
 
- const handleSaveStatus = async (newStatus: number, isPaid: boolean) => {
+  const handleSaveStatus = async (newStatus: number, isPaid: boolean) => {
     try {
-        await updateOrderStatus(selectedOrder!.customerId, selectedOrder!.id, {
-            status: newStatus,
-            isPaid: isPaid,
-        });
-        window.location.href = "/orders";
+      await updateOrderStatus(selectedOrder!.customerId, selectedOrder!.id, {
+        status: newStatus,
+        isPaid: isPaid,
+      });
+      window.location.href = "/orders";
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Ошибка сохранения"
-      );
+      setError(err instanceof Error ? err.message : "Ошибка сохранения");
     }
   };
 
   const handleSaveCartLines = async (data: {
-  cartLinesDtoForAdd: CartLine[] | null;
-  cartLinesDtoForRemove: CartLine[] | null;
-}) => {
-  try {
-    await updateOrderCartLines(
-      selectedOrder!.customerId,
-      selectedOrder!.id,
-      {
+    cartLinesDtoForAdd: CartLine[] | null;
+    cartLinesDtoForRemove: CartLine[] | null;
+  }) => {
+    try {
+      await updateOrderCartLines(selectedOrder!.customerId, selectedOrder!.id, {
         cartLinesDtoForAdd: data.cartLinesDtoForAdd || [],
-        cartLinesDtoForRemove: data.cartLinesDtoForRemove || []
-      }
-    );
-    window.location.href = "/orders";
-  } catch (err) {
-    setError(
-      err instanceof Error ? err.message : "Ошибка сохранения"
-    );
-  }
-};
+        cartLinesDtoForRemove: data.cartLinesDtoForRemove || [],
+      });
+      window.location.href = "/orders";
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка сохранения");
+    }
+  };
 
   const filteredOrders = orders.filter((order) =>
     showArchived ? order.status === "Shipped" : order.status !== "Shipped"
@@ -147,6 +143,7 @@ const OrdersPage: React.FC = () => {
     <div className="container mt-4">
       <div className="d-flex justify-content-between align-items-center mb-4">
         <h2 className="mb-0">Список заказов</h2>
+        <button className="btn btn-success" onClick={() => navigate("/order/new")}>Добавить</button>
         <button
           className="btn btn-outline-secondary"
           onClick={() => setShowArchived(!showArchived)}
